@@ -1,14 +1,19 @@
 package binlog
 
-func newEvent(schema, table, action string, data []map[string]any) *Event {
-	return &Event{schema: schema, table: table, action: action, data: data}
+func newEvent(db, schema, table, action string, data []map[string]any) *Event {
+	return &Event{db: db, schema: schema, table: table, action: action, data: data}
 }
 
 type Event struct {
+	db     string
 	schema string
 	table  string
 	action string
 	data   []map[string]any
+}
+
+func (e *Event) DB() string {
+	return e.db
 }
 
 func (e *Event) Schema() string {
@@ -23,6 +28,6 @@ func (e *Event) Action() string {
 	return e.action
 }
 
-func (e *Event) Data() []map[string]any {
+func (e *Event) Rows() []map[string]any {
 	return e.data
 }

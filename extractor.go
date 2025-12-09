@@ -63,7 +63,7 @@ func (h *Extractor) OnRow(event *canal.RowsEvent) (err error) {
 			h.meta.Timestamp = event.Header.Timestamp
 		}
 	}()
-	if colNames, colsPos, ok := h.check(event); ok {
+	if db, colNames, colsPos, ok := h.check(event); ok {
 		action := event.Action
 		data := make([]map[string]any, 0, len(event.Rows))
 		for i, row := range event.Rows {
@@ -106,13 +106,13 @@ func (h *Extractor) OnRow(event *canal.RowsEvent) (err error) {
 		}
 		if !h.stopped.Load() {
 			h.meta.Position.Pos = event.Header.LogPos
-			h.out <- newEvent(schema, tableName, action, data)
+			h.out <- newEvent(db, schema, tableName, action, data)
 		}
 	}
 	return
 }
 
-func (h *Extractor) check(event *canal.RowsEvent) (colNames []string, colsPos []int, ok bool) {
+func (h *Extractor) check(event *canal.RowsEvent) (db string, colNames []string, colsPos []int, ok bool) {
 	if h.stopped.Load() && h.meta.Position.Pos <= event.Header.LogPos-event.Header.EventSize {
 		return
 	}
@@ -142,6 +142,7 @@ func (h *Extractor) check(event *canal.RowsEvent) (colNames []string, colsPos []
 				log.Printf("event time[%d]  is less than or equal to column version[%d] skip", eventTime, _column.Version)
 			} else {
 				colNames = table.Get(action)
+				db = cfg.DB
 				if colsPos, ok = _column.ColumnPos(colNames); !ok {
 					log.Printf("required column [%s] not found, founded column [%s]", strings.Join(colNames, ","), strings.Join(_column.Names, ","))
 				}

@@ -1,6 +1,9 @@
 package binlog
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
 
 var (
 	consumer *Consumer
@@ -8,13 +11,11 @@ var (
 	once     sync.Once
 )
 
-func Events(serverId uint32) (<-chan *Event, bool) {
-	lock.RLock()
-	defer lock.RUnlock()
-	if handler, ok := consumer.handlers[serverId]; ok && !consumer.Stopped() {
-		return handler.event, ok
+func Events(serverId uint32) (event <-chan *Event, ok bool) {
+	if _consumer := getConsumer(); _consumer != nil {
+		event, ok = _consumer.Event(serverId)
 	}
-	return nil, false
+	return
 }
 
 func Stopped() bool {
@@ -31,22 +32,44 @@ func Cancel() {
 
 func Init(dir string, configs []*Config) {
 	once.Do(func() {
-		if err := Reload(dir, configs); err != nil {
+		lock.Lock()
+		defer lock.Unlock()
+		if _consumer, err := reload(dir, configs); err == nil {
+			consumer = _consumer
+			consumer.Start()
+		} else {
 			panic(err)
 		}
 	})
 }
 
-func Reload(dir string, configs []*Config) (err error) {
-	_consumer := newConsumer()
-	if err = _consumer.Init(dir, configs); err == nil {
+func Reload(dir string, configs []*Config) error {
+	if getConsumer() == nil {
+		return uninitializedErr
+	}
+	_consumer, err := reload(dir, configs)
+	if err == nil {
+		lock.Lock()
+		defer lock.Unlock()
 		if consumer != nil {
 			consumer.Cancel()
 		}
-		lock.Lock()
-		lock.Unlock()
 		consumer = _consumer
 		consumer.Start()
 	}
+	return err
+}
+
+func reload(dir string, configs []*Config) (_consumer *Consumer, err error) {
+	_consumer = newConsumer()
+	err = _consumer.Init(dir, configs)
 	return
 }
+
+func getConsumer() *Consumer {
+	lock.RLock()
+	defer lock.RUnlock()
+	return consumer
+}
+
+var uninitializedErr = errors.New("binlog consumer uninitialized")

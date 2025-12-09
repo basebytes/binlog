@@ -54,3 +54,12 @@ func (c *Consumer) Cancel() {
 		time.Sleep(time.Second)
 	}
 }
+
+func (c *Consumer) Event(serverId uint32) (<-chan *Event, bool) {
+	if !c.Stopped() {
+		if handler, ok := c.handlers[serverId]; ok {
+			return handler.Event(), true
+		}
+	}
+	return nil, false
+}

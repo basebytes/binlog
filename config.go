@@ -74,10 +74,10 @@ func (c *Config) Addr() string {
 }
 
 type Schema struct {
-	DB         string
-	Name       string
-	FirstStart uint32 //unix seconds
-	Tables     map[string]*Action
+	DB         string             `json:"db,omitempty"`
+	Name       string             `json:"name,omitempty"`
+	FirstStart uint32             `json:"firstStart,omitempty"` //unix seconds
+	Tables     map[string]*Action `json:"tables,omitempty"`
 }
 
 func (db *Schema) GetColumns(table, action string) (columns []string) {
