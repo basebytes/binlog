@@ -28,10 +28,10 @@ type Extractor struct {
 }
 
 func (h *Extractor) OnRotate(_ *replication.EventHeader, event *replication.RotateEvent) error {
-	h.meta.Position = &mysql.Position{
+	h.meta.NewPos(&mysql.Position{
 		Name: string(event.NextLogName),
 		Pos:  uint32(event.Position),
-	}
+	})
 	h.save()
 	return nil
 }
@@ -60,7 +60,7 @@ func (h *Extractor) OnPosSynced(header *replication.EventHeader, pos mysql.Posit
 func (h *Extractor) OnRow(event *canal.RowsEvent) (err error) {
 	defer func() {
 		if !h.stopped.Load() {
-			h.meta.Timestamp = event.Header.Timestamp
+			h.meta.Update(event.Header.LogPos, event.Header.Timestamp)
 		}
 	}()
 	if db, colNames, colsPos, ok := h.check(event); ok {
@@ -105,7 +105,6 @@ func (h *Extractor) OnRow(event *canal.RowsEvent) (err error) {
 			return
 		}
 		if !h.stopped.Load() {
-			h.meta.Position.Pos = event.Header.LogPos
 			h.out <- newEvent(db, schema, tableName, action, data)
 		}
 	}
@@ -113,19 +112,20 @@ func (h *Extractor) OnRow(event *canal.RowsEvent) (err error) {
 }
 
 func (h *Extractor) check(event *canal.RowsEvent) (db string, colNames []string, colsPos []int, ok bool) {
-	if h.stopped.Load() && h.meta.Position.Pos <= event.Header.LogPos-event.Header.EventSize {
+	after := h.meta.AfterProgress(event.Header.LogPos - event.Header.EventSize)
+	if h.stopped.Load() && after {
 		return
 	}
-	eventTime := event.Header.Timestamp
-	if h.meta.Timestamp > 0 && eventTime < h.meta.Timestamp {
-		log.Printf("event time[%d] is less then sync progress[%d] skip", eventTime, h.meta.Timestamp)
+	if !after {
+		log.Printf("event[%s] pos[%d] is before the sync progress[%d] skip", event.Table.String(), event.Header.LogPos-event.Header.EventSize, h.meta.Position.Pos)
 		return
 	}
 	var (
-		schema   = event.Table.Schema
-		cfg      *Schema
-		_columns *columns
-		_column  *column
+		schema    = event.Table.Schema
+		eventTime = event.Header.Timestamp
+		cfg       *Schema
+		_columns  *columns
+		_column   *column
 	)
 	if cfg, ok = h.schemas[schema]; ok {
 		tableName := event.Table.Name

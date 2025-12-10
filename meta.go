@@ -84,6 +84,19 @@ type Meta struct {
 	Timestamp uint32            `json:"timestamp"`
 }
 
+func (m *Meta) NewPos(pos *mysql.Position) {
+	m.Position = pos
+}
+
+func (m *Meta) Update(logPos, eventTime uint32) {
+	m.Position.Pos = logPos
+	m.Timestamp = eventTime
+}
+
+func (m *Meta) AfterProgress(pos uint32) bool {
+	return m.Position.Pos <= pos
+}
+
 func (m *Meta) GetOrNewColumns(schema, table string) (c *columns) {
 	if tables, ok := m.Schema[schema]; !ok {
 		tables = newTable()
